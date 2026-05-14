@@ -117,19 +117,25 @@ export default function Canvas() {
 
   const handleMouseUp = useCallback(() => { isPanning.current = false; }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = containerRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const vp = viewportRef.current;
-    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.min(Math.max(vp.scale * factor, 0.08), 5);
-    const cx = (mx - vp.x) / vp.scale;
-    const cy = (my - vp.y) / vp.scale;
-    const next = { x: mx - cx * newScale, y: my - cy * newScale, scale: newScale };
-    viewportRef.current = next;
-    setViewport(next);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const vp = viewportRef.current;
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.min(Math.max(vp.scale * factor, 0.08), 5);
+      const cx = (mx - vp.x) / vp.scale;
+      const cy = (my - vp.y) / vp.scale;
+      const next = { x: mx - cx * newScale, y: my - cy * newScale, scale: newScale };
+      viewportRef.current = next;
+      setViewport(next);
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
   }, [setViewport]);
 
   const cursor = isPanning.current ? 'grabbing'
@@ -151,7 +157,6 @@ export default function Canvas() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
     >
       {/* Canvas world */}
       <div
