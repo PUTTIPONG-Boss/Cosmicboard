@@ -20,15 +20,12 @@ export default function Canvas() {
   const nodes = useCanvasStore(s => s.nodes);
   const viewport = useCanvasStore(s => s.viewport);
   const tool = useCanvasStore(s => s.tool);
-  const clearSelection = useCanvasStore(s => s.clearSelection);
-  const cancelConnecting = useCanvasStore(s => s.cancelConnecting);
   const setViewport = useCanvasStore(s => s.setViewport);
   const addNode = useCanvasStore(s => s.addNode);
   const deleteSelected = useCanvasStore(s => s.deleteSelected);
 
   const spaceHeld = useRef(false);
   const viewportRef = useRef(viewport);
-
   useEffect(() => { viewportRef.current = viewport; }, [viewport]);
 
   const screenToCanvas = useCallback((sx: number, sy: number) => {
@@ -40,10 +37,8 @@ export default function Canvas() {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
       if (e.code === 'Space') { e.preventDefault(); spaceHeld.current = true; }
       if (e.code === 'Delete' || e.code === 'Backspace') deleteSelected();
-
       const store = useCanvasStore.getState();
       if (e.key === 'v' || e.key === 'V') store.setTool('select');
       if (e.key === 'h' || e.key === 'H') store.setTool('hand');
@@ -60,21 +55,63 @@ export default function Canvas() {
     };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); };
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
   }, [deleteSelected]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 && e.button !== 1) return;
-    const target = e.target as HTMLElement;
-    const isCanvas = target === containerRef.current || target.classList.contains('canvas-bg');
-    if (!isCanvas) return;
+  // All canvas interactions via native pointer events + pointer capture
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
 
-    if (tool === 'hand' || spaceHeld.current || e.button === 1) {
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0 && e.button !== 1) return;
+
+      const target = e.target as HTMLElement;
+      // Nodes handle their own interactions
+      if (target.closest('.node-card')) return;
+
+      const store = useCanvasStore.getState();
+      const t = store.tool;
+
+      // DrawingLayer handles draw/eraser
+      if (t === 'draw' || t === 'eraser') return;
+
+      // Connect: cancel on empty canvas click
+      if (t === 'connect') {
+        store.cancelConnecting();
+        return;
+      }
+
+      // Text / todo / idea: place node on click
+      if (t === 'text' || t === 'todo' || t === 'idea') {
+        const rect = el.getBoundingClientRect();
+        const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
+        const sizes: Record<string, [number, number]> = {
+          text: [280, 180], todo: [260, 220], idea: [220, 220],
+        };
+        const [w, h] = sizes[t];
+        store.addNode(t as Parameters<typeof store.addNode>[0], cp.x - w / 2, cp.y - h / 2);
+        store.setTool('select');
+        return;
+      }
+
+      // Select: deselect on click; drag → pan
+      if (t === 'select') {
+        store.clearSelection();
+        store.cancelConnecting();
+      }
+
+      // Pan (hand, space, middle-button, or select-drag on empty canvas)
       e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+
       let lastX = e.clientX;
       let lastY = e.clientY;
 
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         const dx = ev.clientX - lastX;
         const dy = ev.clientY - lastY;
         lastX = ev.clientX;
@@ -84,45 +121,25 @@ export default function Canvas() {
         viewportRef.current = next;
         setViewport(next);
       };
+
       const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
       };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-      return;
-    }
 
-    if (tool === 'select') {
-      clearSelection();
-      cancelConnecting();
-      return;
-    }
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+    };
 
-    if (tool === 'connect') {
-      cancelConnecting();
-      return;
-    }
+    el.addEventListener('pointerdown', onPointerDown);
+    return () => el.removeEventListener('pointerdown', onPointerDown);
+  }, [setViewport, screenToCanvas]);
 
-    if (tool === 'text' || tool === 'todo' || tool === 'idea') {
-      const rect = containerRef.current!.getBoundingClientRect();
-      const cp = screenToCanvas(e.clientX - rect.left, e.clientY - rect.top);
-      const store = useCanvasStore.getState();
-      const defaults: Record<string, { w: number; h: number }> = {
-        text: { w: 280, h: 180 },
-        todo: { w: 260, h: 220 },
-        idea: { w: 220, h: 220 },
-      };
-      const d = defaults[tool];
-      addNode(tool, cp.x - d.w / 2, cp.y - d.h / 2);
-      store.setTool('select');
-    }
-  }, [tool, clearSelection, cancelConnecting, screenToCanvas, addNode, setViewport]);
-
+  // Wheel zoom
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
@@ -136,8 +153,8 @@ export default function Canvas() {
       viewportRef.current = next;
       setViewport(next);
     };
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, [setViewport]);
 
   const cursor = spaceHeld.current ? 'grab' : (CANVAS_CURSORS[tool] ?? 'default');
@@ -153,9 +170,7 @@ export default function Canvas() {
         cursor,
         zIndex: 1,
       }}
-      onMouseDown={handleMouseDown}
     >
-      {/* Canvas world */}
       <div
         style={{
           position: 'absolute',
@@ -172,12 +187,8 @@ export default function Canvas() {
         {nodes
           .slice()
           .sort((a, b) => a.zIndex - b.zIndex)
-          .map(node => (
-            <BaseNode key={node.id} node={node} />
-          ))}
+          .map(node => <BaseNode key={node.id} node={node} />)}
       </div>
-
-      {/* Drawing layer (screen space) */}
       <DrawingLayer />
     </div>
   );

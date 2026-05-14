@@ -46,19 +46,17 @@ export default function BaseNode({ node }: { node: CanvasNode }) {
   const connectingFromId = useCanvasStore(s => s.connectingFromId);
   const selectedIds = useCanvasStore(s => s.selectedIds);
   const tool = useCanvasStore(s => s.tool);
-  const viewport = useCanvasStore(s => s.viewport);
 
   const isSelected = selectedIds.includes(node.id);
   const isConnectTool = tool === 'connect';
   const isBeingConnectedFrom = connectingFromId === node.id;
 
   const nodeRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{ startMx: number; startMy: number; startNx: number; startNy: number } | null>(null);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [ctxPos, setCtxPos] = useState({ x: 0, y: 0 });
   const [hovered, setHovered] = useState(false);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.stopPropagation();
 
@@ -74,29 +72,29 @@ export default function BaseNode({ node }: { node: CanvasNode }) {
     bringToFront(node.id);
     selectNode(node.id, e.shiftKey || e.ctrlKey || e.metaKey);
 
-    dragState.current = {
-      startMx: e.clientX,
-      startMy: e.clientY,
-      startNx: node.x,
-      startNy: node.y,
-    };
+    const el = nodeRef.current!;
+    el.setPointerCapture(e.pointerId);
 
-    const onMove = (ev: MouseEvent) => {
-      if (!dragState.current) return;
-      const dx = (ev.clientX - dragState.current.startMx) / viewport.scale;
-      const dy = (ev.clientY - dragState.current.startMy) / viewport.scale;
-      moveNode(node.id, dragState.current.startNx + dx, dragState.current.startNy + dy);
+    const startMx = e.clientX;
+    const startMy = e.clientY;
+    const startNx = node.x;
+    const startNy = node.y;
+
+    const onMove = (ev: PointerEvent) => {
+      const scale = useCanvasStore.getState().viewport.scale;
+      const dx = (ev.clientX - startMx) / scale;
+      const dy = (ev.clientY - startMy) / scale;
+      moveNode(node.id, startNx + dx, startNy + dy);
     };
 
     const onUp = () => {
-      dragState.current = null;
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
     };
 
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [node, isConnectTool, connectingFromId, viewport.scale, selectNode, moveNode, bringToFront, startConnecting, finishConnecting]);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+  }, [node, isConnectTool, connectingFromId, selectNode, moveNode, bringToFront, startConnecting, finishConnecting]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -130,7 +128,7 @@ export default function BaseNode({ node }: { node: CanvasNode }) {
           boxShadow: (isSelected || hovered) ? GLOW[node.color] : undefined,
           transition: 'box-shadow 0.2s ease',
         }}
-        onMouseDown={handleMouseDown}
+        onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
