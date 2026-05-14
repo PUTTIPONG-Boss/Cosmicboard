@@ -151,34 +151,37 @@ export default function BaseNode({ node }: { node: CanvasNode }) {
         {node.type === 'idea' && <IdeaNode node={node} />}
 
         {/* Connection dots */}
-        {(isConnectTool || hovered) && connectDots.map(dot => (
+        {(isConnectTool || hovered || !!connectingFromId) && connectDots.map(dot => (
           <div
             key={dot.pos}
             style={{
               position: 'absolute',
-              left: dot.x - 7,
-              top: dot.y - 7,
-              width: 14,
-              height: 14,
+              left: dot.x - 9,
+              top: dot.y - 9,
+              width: 18,
+              height: 18,
               borderRadius: '50%',
-              background: DOT[node.color],
-              border: '2px solid white',
+              background: connectingFromId && connectingFromId !== node.id ? 'white' : DOT[node.color],
+              border: `2px solid ${DOT[node.color]}`,
               cursor: 'crosshair',
               zIndex: 100,
-              boxShadow: `0 0 8px ${DOT[node.color]}`,
+              boxShadow: `0 0 10px ${DOT[node.color]}`,
+              transition: 'transform 0.1s',
+              transform: connectingFromId && connectingFromId !== node.id ? 'scale(1.3)' : 'scale(1)',
             }}
             onPointerDown={(e) => {
-              e.stopPropagation();
-              const dotEl = e.currentTarget;
-              dotEl.setPointerCapture(e.pointerId);
-              useCanvasStore.getState().startConnecting(node.id);
+              e.stopPropagation();  // prevent node-card drag from triggering
+              e.preventDefault();
+              const store = useCanvasStore.getState();
+              store.startConnecting(node.id);
+              store.setConnectingPreview({ x: e.clientX, y: e.clientY });
 
-              const onMove = (ev: PointerEvent) => {
+              const onMove = (ev: MouseEvent) => {
                 useCanvasStore.getState().setConnectingPreview({ x: ev.clientX, y: ev.clientY });
               };
-              const onUp = (ev: PointerEvent) => {
-                dotEl.removeEventListener('pointermove', onMove);
-                dotEl.removeEventListener('pointerup', onUp);
+              const onUp = (ev: MouseEvent) => {
+                window.removeEventListener('mousemove', onMove);
+                window.removeEventListener('mouseup', onUp);
                 useCanvasStore.getState().setConnectingPreview(null);
                 const els = document.elementsFromPoint(ev.clientX, ev.clientY);
                 let targetId: string | null = null;
@@ -189,14 +192,11 @@ export default function BaseNode({ node }: { node: CanvasNode }) {
                     break;
                   }
                 }
-                if (targetId) {
-                  useCanvasStore.getState().finishConnecting(targetId);
-                } else {
-                  useCanvasStore.getState().cancelConnecting();
-                }
+                if (targetId) useCanvasStore.getState().finishConnecting(targetId);
+                else useCanvasStore.getState().cancelConnecting();
               };
-              dotEl.addEventListener('pointermove', onMove);
-              dotEl.addEventListener('pointerup', onUp);
+              window.addEventListener('mousemove', onMove);
+              window.addEventListener('mouseup', onUp);
             }}
           />
         ))}
