@@ -1,0 +1,27 @@
+# Claude Code local settings
+.claude/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+node_modules
+# Backend
+backend/vendor/
+backend/*.exe
+backend/cosmic-board
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
