@@ -167,13 +167,36 @@ export default function BaseNode({ node }: { node: CanvasNode }) {
               zIndex: 100,
               boxShadow: `0 0 8px ${DOT[node.color]}`,
             }}
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
-              if (connectingFromId) {
-                finishConnecting(node.id);
-              } else {
-                startConnecting(node.id);
-              }
+              const dotEl = e.currentTarget;
+              dotEl.setPointerCapture(e.pointerId);
+              useCanvasStore.getState().startConnecting(node.id);
+
+              const onMove = (ev: PointerEvent) => {
+                useCanvasStore.getState().setConnectingPreview({ x: ev.clientX, y: ev.clientY });
+              };
+              const onUp = (ev: PointerEvent) => {
+                dotEl.removeEventListener('pointermove', onMove);
+                dotEl.removeEventListener('pointerup', onUp);
+                useCanvasStore.getState().setConnectingPreview(null);
+                const els = document.elementsFromPoint(ev.clientX, ev.clientY);
+                let targetId: string | null = null;
+                for (const el of els) {
+                  const card = (el as HTMLElement).closest?.('[data-node-id]') as HTMLElement | null;
+                  if (card?.dataset.nodeId && card.dataset.nodeId !== node.id) {
+                    targetId = card.dataset.nodeId;
+                    break;
+                  }
+                }
+                if (targetId) {
+                  useCanvasStore.getState().finishConnecting(targetId);
+                } else {
+                  useCanvasStore.getState().cancelConnecting();
+                }
+              };
+              dotEl.addEventListener('pointermove', onMove);
+              dotEl.addEventListener('pointerup', onUp);
             }}
           />
         ))}

@@ -20,6 +20,7 @@ interface CanvasStore {
   tool: Tool;
   selectedIds: string[];
   connectingFromId: string | null;
+  connectingPreview: { x: number; y: number } | null;
   drawColor: string;
   drawWidth: number;
   maxZIndex: number;
@@ -41,6 +42,7 @@ interface CanvasStore {
   startConnecting: (fromId: string) => void;
   cancelConnecting: () => void;
   finishConnecting: (toId: string) => void;
+  setConnectingPreview: (pos: { x: number; y: number } | null) => void;
 
   addDrawPath: (path: DrawPath) => void;
   eraseAt: (x: number, y: number, radius: number) => void;
@@ -66,6 +68,7 @@ export const useCanvasStore = create<CanvasStore>()(
       tool: 'select',
       selectedIds: [],
       connectingFromId: null,
+      connectingPreview: null,
       drawColor: '#a78bfa',
       drawWidth: 3,
       maxZIndex: 0,
@@ -177,15 +180,17 @@ export const useCanvasStore = create<CanvasStore>()(
 
       startConnecting: (fromId) => set({ connectingFromId: fromId }),
 
-      cancelConnecting: () => set({ connectingFromId: null }),
+      cancelConnecting: () => set({ connectingFromId: null, connectingPreview: null }),
 
       finishConnecting: (toId) => {
         const { connectingFromId } = get();
         if (connectingFromId && connectingFromId !== toId) {
           get().addConnection(connectingFromId, toId);
         }
-        set({ connectingFromId: null });
+        set({ connectingFromId: null, connectingPreview: null });
       },
+
+      setConnectingPreview: (pos) => set({ connectingPreview: pos }),
 
       addDrawPath: (path) => set(s => ({ drawPaths: [...s.drawPaths, path] })),
 

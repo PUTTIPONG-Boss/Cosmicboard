@@ -13,6 +13,9 @@ export default function ConnectionsLayer() {
   const connections = useCanvasStore(s => s.connections);
   const nodes = useCanvasStore(s => s.nodes);
   const deleteConnection = useCanvasStore(s => s.deleteConnection);
+  const connectingFromId = useCanvasStore(s => s.connectingFromId);
+  const connectingPreview = useCanvasStore(s => s.connectingPreview);
+  const viewport = useCanvasStore(s => s.viewport);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
@@ -132,6 +135,26 @@ export default function ConnectionsLayer() {
           </g>
         );
       })}
+
+      {/* Drag-to-connect preview line */}
+      {connectingFromId && connectingPreview && (() => {
+        const from = nodeMap.get(connectingFromId);
+        if (!from) return null;
+        const fx = from.x + from.width / 2;
+        const fy = from.y + from.height / 2;
+        const tx = (connectingPreview.x - viewport.x) / viewport.scale;
+        const ty = (connectingPreview.y - viewport.y) / viewport.scale;
+        return (
+          <line
+            x1={fx} y1={fy} x2={tx} y2={ty}
+            stroke="#a78bfa"
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            strokeOpacity={0.8}
+            style={{ pointerEvents: 'none' }}
+          />
+        );
+      })()}
     </svg>
   );
 }
