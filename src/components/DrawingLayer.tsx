@@ -54,12 +54,11 @@ export default function DrawingLayer() {
       ctx.stroke();
     }
 
-    // Draw current path in progress
     if (currentPath.current.length > 1) {
-      const tool = useCanvasStore.getState().tool;
+      const currentTool = useCanvasStore.getState().tool;
       const color = useCanvasStore.getState().drawColor;
       const width = useCanvasStore.getState().drawWidth;
-      if (tool === 'draw') {
+      if (currentTool === 'draw') {
         ctx.beginPath();
         ctx.strokeStyle = color;
         ctx.lineWidth = width * vp.scale;
@@ -96,44 +95,49 @@ export default function DrawingLayer() {
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const t = useCanvasStore.getState().tool;
     if (t !== 'draw' && t !== 'eraser') return;
+
     isDrawing.current = true;
     const [cx, cy] = screenToCanvas(e.clientX, e.clientY);
     currentPath.current = [[cx, cy]];
-  }, [screenToCanvas]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDrawing.current) return;
-    const t = useCanvasStore.getState().tool;
-    const [cx, cy] = screenToCanvas(e.clientX, e.clientY);
+    const onMove = (ev: MouseEvent) => {
+      if (!isDrawing.current) return;
+      const currentTool = useCanvasStore.getState().tool;
+      const [cx2, cy2] = screenToCanvas(ev.clientX, ev.clientY);
+      if (currentTool === 'draw') {
+        currentPath.current.push([cx2, cy2]);
+        render();
+      } else if (currentTool === 'eraser') {
+        const vp = useCanvasStore.getState().viewport;
+        eraseAt(cx2, cy2, 20 / vp.scale);
+        render();
+      }
+    };
 
-    if (t === 'draw') {
-      currentPath.current.push([cx, cy]);
+    const onUp = () => {
+      if (!isDrawing.current) return;
+      isDrawing.current = false;
+      const currentTool = useCanvasStore.getState().tool;
+      if (currentTool === 'draw' && currentPath.current.length > 1) {
+        const color = useCanvasStore.getState().drawColor;
+        const width = useCanvasStore.getState().drawWidth;
+        const path: DrawPath = {
+          id: genId(),
+          points: [...currentPath.current] as [number, number][],
+          color,
+          width,
+        };
+        addDrawPath(path);
+      }
+      currentPath.current = [];
       render();
-    } else if (t === 'eraser') {
-      const vp = useCanvasStore.getState().viewport;
-      eraseAt(cx, cy, 20 / vp.scale);
-      render();
-    }
-  }, [screenToCanvas, render, eraseAt]);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
 
-  const handleMouseUp = useCallback(() => {
-    if (!isDrawing.current) return;
-    isDrawing.current = false;
-    const t = useCanvasStore.getState().tool;
-    if (t === 'draw' && currentPath.current.length > 1) {
-      const color = useCanvasStore.getState().drawColor;
-      const width = useCanvasStore.getState().drawWidth;
-      const path: DrawPath = {
-        id: genId(),
-        points: [...currentPath.current] as [number, number][],
-        color,
-        width,
-      };
-      addDrawPath(path);
-    }
-    currentPath.current = [];
-    render();
-  }, [addDrawPath, render]);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [screenToCanvas, render, eraseAt, addDrawPath]);
 
   const isActive = tool === 'draw' || tool === 'eraser';
 
@@ -148,9 +152,6 @@ export default function DrawingLayer() {
         cursor: tool === 'eraser' ? 'cell' : tool === 'draw' ? 'crosshair' : 'default',
       }}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
     />
   );
 }

@@ -26,8 +26,6 @@ export default function Canvas() {
   const addNode = useCanvasStore(s => s.addNode);
   const deleteSelected = useCanvasStore(s => s.deleteSelected);
 
-  const isPanning = useRef(false);
-  const lastMouse = useRef({ x: 0, y: 0 });
   const spaceHeld = useRef(false);
   const viewportRef = useRef(viewport);
 
@@ -72,9 +70,26 @@ export default function Canvas() {
     if (!isCanvas) return;
 
     if (tool === 'hand' || spaceHeld.current || e.button === 1) {
-      isPanning.current = true;
-      lastMouse.current = { x: e.clientX, y: e.clientY };
       e.preventDefault();
+      let lastX = e.clientX;
+      let lastY = e.clientY;
+
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - lastX;
+        const dy = ev.clientY - lastY;
+        lastX = ev.clientX;
+        lastY = ev.clientY;
+        const vp = viewportRef.current;
+        const next = { x: vp.x + dx, y: vp.y + dy, scale: vp.scale };
+        viewportRef.current = next;
+        setViewport(next);
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
       return;
     }
 
@@ -102,20 +117,7 @@ export default function Canvas() {
       addNode(tool, cp.x - d.w / 2, cp.y - d.h / 2);
       store.setTool('select');
     }
-  }, [tool, clearSelection, cancelConnecting, screenToCanvas, addNode]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning.current) return;
-    const dx = e.clientX - lastMouse.current.x;
-    const dy = e.clientY - lastMouse.current.y;
-    lastMouse.current = { x: e.clientX, y: e.clientY };
-    const vp = viewportRef.current;
-    const next = { x: vp.x + dx, y: vp.y + dy, scale: vp.scale };
-    viewportRef.current = next;
-    setViewport(next);
-  }, [setViewport]);
-
-  const handleMouseUp = useCallback(() => { isPanning.current = false; }, []);
+  }, [tool, clearSelection, cancelConnecting, screenToCanvas, addNode, setViewport]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -138,9 +140,7 @@ export default function Canvas() {
     return () => el.removeEventListener('wheel', handleWheel);
   }, [setViewport]);
 
-  const cursor = isPanning.current ? 'grabbing'
-    : spaceHeld.current ? 'grab'
-    : (CANVAS_CURSORS[tool] ?? 'default');
+  const cursor = spaceHeld.current ? 'grab' : (CANVAS_CURSORS[tool] ?? 'default');
 
   return (
     <div
@@ -154,9 +154,6 @@ export default function Canvas() {
         zIndex: 1,
       }}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
     >
       {/* Canvas world */}
       <div
